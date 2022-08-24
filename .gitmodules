@@ -1,0 +1,6 @@
+[submodule "packages/pytorch-wordemb"]
+	path = packages/pytorch-wordemb
+	url = https://github.com/iamalbert/pytorch-wordemb
+[submodule "packages/word2vec"]
+	path = packages/word2vec
+	url = https://github.com/tmikolov/word2vec

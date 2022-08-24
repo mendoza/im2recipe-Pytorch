@@ -29,9 +29,9 @@ def get_st(file):
         imids.append(''.join(chr(i) for i in id))
 
     st_vecs = {}
-    st_vecs['encs'] = info['encs']
-    st_vecs['rlens'] = info['rlens']
-    st_vecs['rbps'] = info['rbps']
+    st_vecs['encs'] = info[b'encs']
+    st_vecs['rlens'] = info[b'rlens']
+    st_vecs['rbps'] = info[b'rbps']
     st_vecs['ids'] = imids
 
     print(np.shape(st_vecs['encs']),len(st_vecs['rlens']),len(st_vecs['rbps']),len(st_vecs['ids']))

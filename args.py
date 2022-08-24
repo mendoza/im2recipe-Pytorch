@@ -10,10 +10,10 @@ def get_parser():
     # data
     parser.add_argument('--img_path', default='data/images/')
     parser.add_argument('--data_path', default='data/')
-    parser.add_argument('--workers', default=30, type=int)
+    parser.add_argument('--workers', default=12, type=int)
 
     # model
-    parser.add_argument('--batch_size', default=160, type=int)
+    parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--snapshots', default='snapshots/',type=str)
 
     # im2recipe model
@@ -33,7 +33,7 @@ def get_parser():
     # parser.add_argument('--semantic_reg', default=False,type=bool)
 
     # training 
-    parser.add_argument('--lr', default=0.0001, type=float)
+    parser.add_argument('--lr', default=0.001, type=float)
     parser.add_argument('--momentum', default=0.9, type=float)
     parser.add_argument('--weight_decay', default=0, type=float)
     parser.add_argument('--epochs', default=720, type=int)
@@ -61,6 +61,7 @@ def get_parser():
     parser.add_argument('--vocab', default = 'vocab.txt', type=str)
     parser.add_argument('--dataset', default = '../data/recipe1M/', type=str)
     parser.add_argument('--sthdir', default = '../data/', type=str)
+    parser.add_argument('--percentage', default=1.0, type=float) # percentage to remove from all the datasets (easier computation for my underpower test bench)
 
     return parser
 

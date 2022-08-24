@@ -98,9 +98,8 @@ class im2recipe(nn.Module):
     def __init__(self):
         super(im2recipe, self).__init__()
         if opts.preModel=='resNet50':
-        
-            resnet = models.resnet50(pretrained=True)
-            modules = list(resnet.children())[:-1]  # we do not use the last fc layer.
+            resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+            modules = list(resnet.children())[:-1]  # we do not use the last fc layer.         
             self.visionMLP = nn.Sequential(*modules)
 
             self.visual_embedding = nn.Sequential(
@@ -115,7 +114,6 @@ class im2recipe(nn.Module):
 
         else:
             raise Exception('Only resNet50 model is implemented.') 
-
         self.stRNN_     = stRNN()
         self.ingRNN_    = ingRNN()
         self.table      = TableModule()

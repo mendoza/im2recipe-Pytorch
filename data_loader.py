@@ -12,8 +12,8 @@ def default_loader(path):
     try:
         im = Image.open(path).convert('RGB')
         return im
-    except:
-        print(..., file=sys.stderr)
+    except FileNotFoundError:
+        print(f"File not found {path}", file=sys.stderr)
         return Image.new('RGB', (224, 224), 'white')
        
 class ImagerLoader(data.Dataset):
@@ -30,6 +30,9 @@ class ImagerLoader(data.Dataset):
 
         self.env = lmdb.open(os.path.join(data_path, partition + '_lmdb'), max_readers=1, readonly=True, lock=False,
                              readahead=False, meminit=False)
+        stats = self.env.stat()
+        entries = stats["entries"]
+        print(f"found {entries} entries on partition {partition}")
 
         with open(os.path.join(data_path, partition + '_keys.pkl'), 'rb') as f:
             self.ids = pickle.load(f)
@@ -123,15 +126,18 @@ class ImagerLoader(data.Dataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        rec_class = sample['classes'] - 1
-        rec_id = self.ids[index]
-
         if target == -1:
             img_class = rndsample['classes'] - 1
             img_id = self.ids[rndindex]
+            rec_class = sample['classes'] - 1
+            rec_id = self.ids[rndindex]
+
         else:
             img_class = sample['classes'] - 1
             img_id = self.ids[index]
+            rec_class = sample['classes'] - 1
+            rec_id = self.ids[index]
+
 
         # output
         if self.partition == 'train':

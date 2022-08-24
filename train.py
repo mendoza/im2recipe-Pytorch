@@ -14,11 +14,19 @@ import torch.backends.cudnn as cudnn
 from data_loader import ImagerLoader 
 from args import get_parser
 from trijoint import im2recipe
-
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 # =============================================================================
 parser = get_parser()
 opts = parser.parse_args()
 # =============================================================================
+
+def format_seconds(seconds):
+    minutes = int(seconds // 60)
+    formated_minutes = f"{0 if minutes < 10 else ''}{minutes}"
+    seconds = int(seconds % 60)
+    formated_seconds = f"{0 if seconds < 10 else ''}{seconds}"
+    return f"{formated_minutes}:{formated_seconds}"
 
 if not(torch.cuda.device_count()):
     device = torch.device(*('cpu',0))
@@ -26,6 +34,9 @@ else:
     torch.cuda.manual_seed(opts.seed)
     device = torch.device(*('cuda',0))
 
+train_losses = []
+median_ranks = []
+# torch.autograd.set_detect_anomaly(True)
 def main():
 
     model = im2recipe()
@@ -88,7 +99,7 @@ def main():
     train_loader = torch.utils.data.DataLoader(
         ImagerLoader(opts.img_path,
             transforms.Compose([
-            transforms.Scale(256), # rescale the image keeping the original aspect ratio
+            transforms.Resize(256), # rescale the image keeping the original aspect ratio
             transforms.CenterCrop(256), # we get only the center of that rescaled
             transforms.RandomCrop(224), # random crop within the center crop 
             transforms.RandomHorizontalFlip(),
@@ -96,32 +107,32 @@ def main():
             normalize,
         ]),data_path=opts.data_path,partition='train',sem_reg=opts.semantic_reg),
         batch_size=opts.batch_size, shuffle=True,
-        num_workers=opts.workers, pin_memory=True)
+        num_workers=opts.workers, pin_memory=True, drop_last=True)
     print('Training loader prepared.')
 
     # preparing validation loader 
     val_loader = torch.utils.data.DataLoader(
         ImagerLoader(opts.img_path,
             transforms.Compose([
-            transforms.Scale(256), # rescale the image keeping the original aspect ratio
+            transforms.Resize(256), # rescale the image keeping the original aspect ratio
             transforms.CenterCrop(224), # we get only the center of that rescaled
             transforms.ToTensor(),
             normalize,
         ]),data_path=opts.data_path,sem_reg=opts.semantic_reg,partition='val'),
         batch_size=opts.batch_size, shuffle=False,
-        num_workers=opts.workers, pin_memory=True)
+        num_workers=opts.workers, pin_memory=True,drop_last=True)
     print('Validation loader prepared.')
 
     # run epochs
     for epoch in range(opts.start_epoch, opts.epochs):
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch)
+        train(train_loader, model, criterion, optimizer, epoch) 
 
         # evaluate on validation set
         if (epoch+1) % opts.valfreq == 0 and epoch != 0:
             val_loss = validate(val_loader, model, criterion)
-        
+            median_ranks.append(val_loss)
             # check patience
             if val_loss >= best_val:
                 valtrack += 1
@@ -146,8 +157,7 @@ def main():
                 'freeVision': opts.freeVision,
                 'curr_val': val_loss,
             }, is_best)
-
-            print('** Validation: %f (best) - %d (valtrack)' % (best_val, valtrack))
+            print(f"** Validation: {best_val} (best) - {valtrack} (valtrack)")
 
 def train(train_loader, model, criterion, optimizer, epoch):
     batch_time = AverageMeter()
@@ -162,22 +172,27 @@ def train(train_loader, model, criterion, optimizer, epoch):
     # switch to train mode
     model.train()
 
-    end = time.time()
-    for i, (input, target) in enumerate(train_loader):
+    batch_end = time.time()
+    epoch_end = time.time()
+    for i, (input_original, target) in enumerate(train_loader):
 
         # measure data loading time
-        data_time.update(time.time() - end)
+        data_time.update(time.time() - batch_end)
 
         input_var = list() 
-        for j in range(len(input)):
+        for j in range(len(input_original)):
             # if j>1:
-            input_var.append(input[j].to(device))
+            input_var.append(input_original[j].to(device))
             # else:
                 # input_var.append(input[j].to(device))
 
         target_var = list()
         for j in range(len(target)):
             target_var.append(target[j].to(device))
+
+        if torch.count_nonzero(target_var[1]) == 0 or torch.count_nonzero(target_var[2]) == 0:
+            print("found a batch where img_class or rec_class are filled with 0", target_var[1], target_var[2])
+            continue
 
         # compute output
         output = model(input_var[0], input_var[1], input_var[2], input_var[3], input_var[4])
@@ -193,13 +208,13 @@ def train(train_loader, model, criterion, optimizer, epoch):
                     opts.cls_weight * rec_loss 
 
             # measure performance and record losses
-            cos_losses.update(cos_loss.data, input[0].size(0))
-            img_losses.update(img_loss.data, input[0].size(0))
-            rec_losses.update(rec_loss.data, input[0].size(0))
+            cos_losses.update(cos_loss.data, input_original[0].size(0))
+            img_losses.update(img_loss.data, input_original[0].size(0))
+            rec_losses.update(rec_loss.data, input_original[0].size(0))
         else:
             loss = criterion(output[0], output[1], target_var[0])
             # measure performance and record loss
-            cos_losses.update(loss.data[0], input[0].size(0))
+            cos_losses.update(loss.data[0], input_original[0].size(0))
 
         # compute gradient and do Adam step
         optimizer.zero_grad()
@@ -207,24 +222,28 @@ def train(train_loader, model, criterion, optimizer, epoch):
         optimizer.step()
 
         # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
+        batch_time.update(time.time() - batch_end)
+        batch_end = time.time()
+
+        input_original = None
+        target = None
+        output = None
+        torch.cuda.empty_cache()
+
+    elapsed_time = time.time() - epoch_end
+    epoch_time = format_seconds(elapsed_time)
+    batch_time_avg = format_seconds(batch_time.avg * 1000)
+
+    avg_loss =  opts.cos_weight * cos_losses.avg +\
+                opts.cls_weight * img_losses.avg +\
+                opts.cls_weight * rec_losses.avg
+           
+    train_losses.append(avg_loss.detach().cpu())
 
     if opts.semantic_reg:
-        print('Epoch: {0}\t'
-                  'cos loss {cos_loss.val:.4f} ({cos_loss.avg:.4f})\t'
-                  'img Loss {img_loss.val:.4f} ({img_loss.avg:.4f})\t'
-                  'rec loss {rec_loss.val:.4f} ({rec_loss.avg:.4f})\t'
-                  'vision ({visionLR}) - recipe ({recipeLR})\t'.format(
-                   epoch, cos_loss=cos_losses, img_loss=img_losses,
-                   rec_loss=rec_losses, visionLR=optimizer.param_groups[1]['lr'],
-                   recipeLR=optimizer.param_groups[0]['lr']))
+        print(f"Epoch: {epoch}\t trained in (mm:ss) {epoch_time}\t batch size avg (ss:ms) {batch_time_avg}\t cos loss {cos_losses.val:.4f} ({cos_losses.avg:.4f})\t img Loss {img_losses.val:.4f} ({img_losses.avg:.4f})\t rec loss {rec_losses.val:.4f} ({rec_losses.avg:.4f})\t vision ({optimizer.param_groups[1]['lr']}) - recipe ({optimizer.param_groups[0]['lr']})\t")
     else:
-         print('Epoch: {0}\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'vision ({visionLR}) - recipe ({recipeLR})\t'.format(
-                   epoch, loss=cos_losses, visionLR=optimizer.param_groups[1]['lr'],
-                   recipeLR=optimizer.param_groups[0]['lr']))                 
+         print(f"Epoch: {epoch}\t Loss {cos_losses.val:.4f} ({cos_losses.avg:.4f})\t vision ({optimizer.param_groups[1]['lr']}) - recipe ({optimizer.param_groups[0]['lr']})\t")
 
 def validate(val_loader, model, criterion):
     batch_time = AverageMeter()
@@ -235,35 +254,68 @@ def validate(val_loader, model, criterion):
 
     # switch to evaluate mode
     model.eval()
+    with torch.no_grad():
+        end = time.time()
+        for i, (input_original, target) in enumerate(val_loader):
+            input_var = list() 
+            for j in range(len(input_original)):
+                # input_var.append(torch.autograd.Variable(input[j], volatile=True).cuda())
+                input_var.append(input_original[j].to(device))
+            target_var = list()
+            for j in range(len(target)-2): # we do not consider the last two objects of the list
+                target[j] = target[j].to(device)
+                target_var.append(target[j].to(device))
 
-    end = time.time()
-    for i, (input, target) in enumerate(val_loader):
-        input_var = list() 
-        for j in range(len(input)):
-            # input_var.append(torch.autograd.Variable(input[j], volatile=True).cuda())
-            input_var.append(input[j].to(device))
-        target_var = list()
-        for j in range(len(target)-2): # we do not consider the last two objects of the list
-            target[j] = target[j].to(device)
-            target_var.append(target[j].to(device))
 
-        # compute output
-        output = model(input_var[0],input_var[1], input_var[2], input_var[3], input_var[4])
-        
-        if i==0:
-            data0 = output[0].data.cpu().numpy()
-            data1 = output[1].data.cpu().numpy()
-            data2 = target[-2]
-            data3 = target[-1]
-        else:
-            data0 = np.concatenate((data0,output[0].data.cpu().numpy()),axis=0)
-            data1 = np.concatenate((data1,output[1].data.cpu().numpy()),axis=0)
-            data2 = np.concatenate((data2,target[-2]),axis=0)
-            data3 = np.concatenate((data3,target[-1]),axis=0)
+            if torch.count_nonzero(target_var[1]) == 0 or torch.count_nonzero(target_var[2]) == 0:
+                print("found a batch where img_class or rec_class are filled with 0")
+                continue
+            # compute output
+            output = model(input_var[0],input_var[1], input_var[2], input_var[3], input_var[4])
+            
+            if i==0:
+                data0 = output[0].data.cpu().numpy()
+                data1 = output[1].data.cpu().numpy()
+                data2 = target[-2]
+                data3 = target[-1]
+            else:
+                data0 = np.concatenate((data0,output[0].data.cpu().numpy()),axis=0)
+                data1 = np.concatenate((data1,output[1].data.cpu().numpy()),axis=0)
+                data2 = np.concatenate((data2,target[-2]),axis=0)
+                data3 = np.concatenate((data3,target[-1]),axis=0)
+
+            # compute loss
+            if opts.semantic_reg:
+                cos_loss = criterion[0](output[0], output[1], target_var[0].float())
+                img_loss = criterion[1](output[2], target_var[1])
+                rec_loss = criterion[1](output[3], target_var[2])
+                # combined loss
+                loss =  opts.cos_weight * cos_loss +\
+                        opts.cls_weight * img_loss +\
+                        opts.cls_weight * rec_loss
+
+                # measure performance and record losses
+                cos_losses.update(cos_loss.data, input_original[0].size(0))
+                img_losses.update(img_loss.data, input_original[0].size(0))
+                rec_losses.update(rec_loss.data, input_original[0].size(0))
+            else:
+                loss = criterion(output[0], output[1], target_var[0])
+                # measure performance and record loss
+                cos_losses.update(loss.data[0], input_original[0].size(0))
+            input_original = None
+            target = None
+            output = None
+            torch.cuda.empty_cache()
+
+    avg_loss =  opts.cos_weight * cos_losses.avg +\
+            opts.cls_weight * img_losses.avg +\
+            opts.cls_weight * rec_losses.avg
+    median_ranks.append(avg_loss.detach().cpu())
+
 
     medR, recall = rank(opts, data0, data1, data2)
-    print('* Val medR {medR:.4f}\t'
-          'Recall {recall}'.format(medR=medR, recall=recall))
+    
+    print(f"* Val medR {medR:.4f}\t Recall {recall}")
 
     return medR 
 
@@ -272,20 +324,19 @@ def rank(opts, img_embeds, rec_embeds, rec_ids):
     type_embedding = opts.embtype 
     im_vecs = img_embeds 
     instr_vecs = rec_embeds 
-    names = rec_ids
+    names = np.array(rec_ids)
 
     # Sort based on names to always pick same samples for medr
     idxs = np.argsort(names)
     names = names[idxs]
-
     # Ranker
     N = opts.medr
     idxs = range(N)
 
     glob_rank = []
     glob_recall = {1:0.0,5:0.0,10:0.0}
-    for i in range(10):
 
+    for i in range(10):
         ids = random.sample(range(0,len(names)), N)
         im_sub = im_vecs[ids,:]
         instr_sub = instr_vecs[ids,:]
@@ -340,11 +391,19 @@ def rank(opts, img_embeds, rec_embeds, rec_ids):
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
-
-    filename = opts.snapshots + 'model_e%03d_v-%.3f.pth.tar' % (state['epoch'],state['best_val']) 
+    filename = opts.snapshots + 'model_e%03d_v-%.3f.pth.tar' % (state['epoch'],state['best_val'])
     if is_best:
         torch.save(state, filename)
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        ax1.title.set_text("Train Loss")
+        ax1.plot(train_losses, label="train", color='dodgerblue')
+        ax1.legend()
 
+        ax2.title.set_text("Median Rank")
+        ax2.bar(median_ranks, label="validation", color='darkorange')
+        ax2.legend()
+
+        fig.savefig(filename.replace("model","losses").replace(".pth.tar",".png"))
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self):
