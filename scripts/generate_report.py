@@ -10,7 +10,7 @@ from humanfriendly import format_timespan
 parser = get_parser()
 opts = parser.parse_args()
 
-def build_line_chart(title, x, label_x, filename):
+def generate_line_chart_image(title, x, label_x, filename):
     plt.title(title)
     plt.plot(x, label=label_x)
     plt.legend()
@@ -39,11 +39,11 @@ def main():
         f.write(f"Highest train loss: {train_loss_col.max()} \n")
         f.write(f"Lowest train loss: {train_loss_col.min()} \n")
 
-    build_line_chart("Loss Curve", train_loss_col.tolist(), "Train Loss", "../report/loss_curve.png")
-    build_line_chart("medR over the validation", medR_col.tolist(), "Median Rank", "../report/medR.png")
-    build_line_chart("R@1 over the validation", R_at_1_col.tolist(), "Recall at top 1", "../report/r_at_1.png")
-    build_line_chart("R@5 over the validation", R_at_5_col.tolist(), "Recall at top 5", "../report/r_at_5.png")
-    build_line_chart("R@10 over the validation", R_at_10_col.tolist(), "Recall at top 10", "../report/r_at_10.png")
+    generate_line_chart_image("Loss Curve", train_loss_col.tolist(), "Train Loss", "../report/loss_curve.png")
+    generate_line_chart_image("medR over the validation", medR_col.tolist(), "Median Rank", "../report/medR.png")
+    generate_line_chart_image("R@1 over the validation", R_at_1_col.tolist(), "Recall at top 1", "../report/r_at_1.png")
+    generate_line_chart_image("R@5 over the validation", R_at_5_col.tolist(), "Recall at top 5", "../report/r_at_5.png")
+    generate_line_chart_image("R@10 over the validation", R_at_10_col.tolist(), "Recall at top 10", "../report/r_at_10.png")
     
 
     

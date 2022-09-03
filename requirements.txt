@@ -12,3 +12,4 @@ torch
 torchvision
 pandas
 matplotlib
+humanfriendly
