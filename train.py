@@ -15,11 +15,14 @@ from data_loader import ImagerLoader
 from args import get_parser
 from trijoint import im2recipe
 import matplotlib.pyplot as plt
-from tqdm import tqdm
+import pandas as pd
 # =============================================================================
 parser = get_parser()
 opts = parser.parse_args()
 # =============================================================================
+
+def get_report_filename(filename): 
+    return filename.replace('model','report').replace('.pth.tar', '.csv')
 
 def format_seconds(seconds):
     minutes = int(seconds // 60)
@@ -34,8 +37,7 @@ else:
     torch.cuda.manual_seed(opts.seed)
     device = torch.device(*('cuda',0))
 
-train_losses = []
-median_ranks = []
+df = pd.DataFrame({"epoch":[], "train_loss": [], "medR":[], "R@1": [], "R@5": [], "R@10": [], "epoch_time":[]})
 # torch.autograd.set_detect_anomaly(True)
 def main():
 
@@ -67,6 +69,15 @@ def main():
             ], lr=opts.lr*opts.freeRecipe)
 
     if opts.resume:
+        report_filename = get_report_filename(opts.resume)
+        if os.path.isfile(report_filename):
+            print("=> loading report '{}'".format(report_filename))
+            global df
+            df = pd.read_csv(report_filename)
+            print("=> loaded report '{}'".format(report_filename))
+        else:
+            print("=> no report found at '{}'".format(report_filename))
+            
         if os.path.isfile(opts.resume):
             print("=> loading checkpoint '{}'".format(opts.resume))
             checkpoint = torch.load(opts.resume)
@@ -132,7 +143,6 @@ def main():
         # evaluate on validation set
         if (epoch+1) % opts.valfreq == 0 and epoch != 0:
             val_loss = validate(val_loader, model, criterion)
-            median_ranks.append(val_loss)
             # check patience
             if val_loss >= best_val:
                 valtrack += 1
@@ -237,8 +247,19 @@ def train(train_loader, model, criterion, optimizer, epoch):
     avg_loss =  opts.cos_weight * cos_losses.avg +\
                 opts.cls_weight * img_losses.avg +\
                 opts.cls_weight * rec_losses.avg
-           
-    train_losses.append(avg_loss.detach().cpu())
+
+    df2 = pd.DataFrame({
+        "epoch": epoch,
+        "epoch_time": elapsed_time, 
+        "train_loss": avg_loss.detach().cpu(),
+        "medR": -1,
+        "R@1": -1,
+        "R@5": -1,
+        "R@10": -1,
+    })
+
+    global df
+    df = pd.concat([df,df2], ignore_index=True)
 
     if opts.semantic_reg:
         print(f"Epoch: {epoch}\t trained in (mm:ss) {epoch_time}\t batch size avg (ss:ms) {batch_time_avg}\t cos loss {cos_losses.val:.4f} ({cos_losses.avg:.4f})\t img Loss {img_losses.val:.4f} ({img_losses.avg:.4f})\t rec loss {rec_losses.val:.4f} ({rec_losses.avg:.4f})\t vision ({optimizer.param_groups[1]['lr']}) - recipe ({optimizer.param_groups[0]['lr']})\t")
@@ -310,11 +331,15 @@ def validate(val_loader, model, criterion):
     avg_loss =  opts.cos_weight * cos_losses.avg +\
             opts.cls_weight * img_losses.avg +\
             opts.cls_weight * rec_losses.avg
-    median_ranks.append(avg_loss.detach().cpu())
-
 
     medR, recall = rank(opts, data0, data1, data2)
-    
+
+    global df
+    df.iloc[-1, df.columns.get_loc('medR')] = medR
+    df.iloc[-1, df.columns.get_loc('R@1')] = recall[1]
+    df.iloc[-1, df.columns.get_loc('R@5')] = recall[5]
+    df.iloc[-1, df.columns.get_loc('R@10')] = recall[10]
+
     print(f"* Val medR {medR:.4f}\t Recall {recall}")
 
     return medR 
@@ -392,18 +417,10 @@ def rank(opts, img_embeds, rec_embeds, rec_ids):
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     filename = opts.snapshots + 'model_e%03d_v-%.3f.pth.tar' % (state['epoch'],state['best_val'])
+    global df
+    df.to_csv(get_report_filename(filename))
     if is_best:
         torch.save(state, filename)
-        fig, (ax1, ax2) = plt.subplots(1, 2)
-        ax1.title.set_text("Train Loss")
-        ax1.plot(train_losses, label="train", color='dodgerblue')
-        ax1.legend()
-
-        ax2.title.set_text("Median Rank")
-        ax2.bar(median_ranks, label="validation", color='darkorange')
-        ax2.legend()
-
-        fig.savefig(filename.replace("model","losses").replace(".pth.tar",".png"))
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self):
