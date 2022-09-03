@@ -249,13 +249,13 @@ def train(train_loader, model, criterion, optimizer, epoch):
                 opts.cls_weight * rec_losses.avg
 
     df2 = pd.DataFrame({
-        "epoch": epoch,
-        "epoch_time": elapsed_time, 
-        "train_loss": avg_loss.detach().cpu(),
-        "medR": -1,
-        "R@1": -1,
-        "R@5": -1,
-        "R@10": -1,
+        "epoch": [epoch],
+        "epoch_time": [elapsed_time], 
+        "train_loss": [float(avg_loss.detach().cpu())],
+        "medR": [-1],
+        "R@1": [-1],
+        "R@5": [-1],
+        "R@10": [-1]
     })
 
     global df
