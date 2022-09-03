@@ -10,3 +10,5 @@ nltk
 simplejson
 torch
 torchvision
+pandas
+matplotlib
