@@ -66,7 +66,7 @@ def main():
     test_loader = torch.utils.data.DataLoader(
         ImagerLoader(opts.img_path,
  	    transforms.Compose([
-            transforms.Scale(256), # rescale the image keeping the original aspect ratio
+            transforms.Resize(256), # rescale the image keeping the original aspect ratio
             transforms.CenterCrop(224), # we get only the center of that rescaled
             transforms.ToTensor(),
             normalize,
@@ -89,10 +89,10 @@ def test(test_loader, model, criterion):
     model.eval()
 
     end = time.time()
-    for i, (input, target) in enumerate(test_loader):
+    for i, (input_original, target) in enumerate(test_loader):
         input_var = list() 
-        for j in range(len(input)):
-            input_var.append(input[j].to(device))
+        for j in range(len(input_original)):
+            input_var.append(input_original[j].to(device))
         target_var = list()
         for j in range(len(target)-2): # we do not consider the last two objects of the list
             target_var.append(target[j].to(device))
@@ -111,13 +111,13 @@ def test(test_loader, model, criterion):
                     opts.cls_weight * rec_loss 
 
             # measure performance and record losses
-            cos_losses.update(cos_loss.data, input[0].size(0))
-            img_losses.update(img_loss.data, input[0].size(0))
-            rec_losses.update(rec_loss.data, input[0].size(0))
+            cos_losses.update(cos_loss.data, input_original[0].size(0))
+            img_losses.update(img_loss.data, input_original[0].size(0))
+            rec_losses.update(rec_loss.data, input_original[0].size(0))
         else:
             loss = criterion(output[0], output[1], target_var[0])
             # measure performance and record loss
-            cos_losses.update(loss.data[0], input[0].size(0))
+            cos_losses.update(loss.data[0], input_original[0].size(0))
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -134,6 +134,11 @@ def test(test_loader, model, criterion):
             data2 = np.concatenate((data2,target[-2]),axis=0)
             data3 = np.concatenate((data3,target[-1]),axis=0)
 
+        input_original = None
+        target = None
+        output = None
+        torch.cuda.empty_cache()
+        
     if opts.semantic_reg:
         print('* Test cosine loss {losses.avg:.4f}'.format(losses=cos_losses))
         print('* Test img class loss {losses.avg:.4f}'.format(losses=img_losses))

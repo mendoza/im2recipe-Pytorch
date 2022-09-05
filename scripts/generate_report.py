@@ -22,20 +22,21 @@ def remove_minus_ones(numpy_list):
     return numpy_list[~np.isin(numpy_list, [-1])]
 
 def main():
-    report = pd.read_csv(opts.report_filename)
+    report = pd.read_csv(opts.report_path)
 
-    batch_size_col = report["batch_time"].to_numpy()
+    batch_size_col = report["epoch_time"].to_numpy()
     train_loss_col = report["train_loss"].to_numpy()
     medR_col = remove_minus_ones(report["medR"].to_numpy())
     R_at_1_col = remove_minus_ones(report["R@1"].to_numpy())
     R_at_5_col = remove_minus_ones(report["R@5"].to_numpy())
     R_at_10_col = remove_minus_ones(report["R@10"].to_numpy())
 
-    # TODO: Buscar la libreria para imprimir bomnito el delta
     if os.path.isdir('../report'):
-        shutil.rmtree('../report')
+        shutil.rmtree("../report")
+        
+    os.mkdir("../report")
 
-    with open("../report/info.txt","w") as f:
+    with open("../report/info.txt","w+") as f:
         total_train = batch_size_col.sum()
         average_epoch_time = total_train / len(batch_size_col)
         f.write(f"Total training took: {format_timespan(total_train)} \n")

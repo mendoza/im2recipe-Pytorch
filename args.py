@@ -13,7 +13,7 @@ def get_parser():
     parser.add_argument('--workers', default=12, type=int)
 
     # model
-    parser.add_argument('--batch_size', default=36, type=int)
+    parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--snapshots', default='snapshots/',type=str)
 
     # im2recipe model
@@ -61,7 +61,10 @@ def get_parser():
     parser.add_argument('--vocab', default = 'vocab.txt', type=str)
     parser.add_argument('--dataset', default = '../data/recipe1M/', type=str)
     parser.add_argument('--sthdir', default = '../data/', type=str)
-    parser.add_argument('--percentage', default=1.0, type=float) # percentage to remove from all the datasets (easier computation for my underpower test bench)
+    parser.add_argument('--percentage', default=0.0, type=float) # percentage to remove from all the datasets (easier computation for my underpower test bench)
+    parser.add_argument('--report_path', default = '../data/', type=str)
+    parser.add_argument('--data_aug', default='old', type=str)
+
 
     return parser
 

@@ -16,6 +16,7 @@ from args import get_parser
 from trijoint import im2recipe
 import matplotlib.pyplot as plt
 import pandas as pd
+from transformer import CustomDataAugmentation
 # =============================================================================
 parser = get_parser()
 opts = parser.parse_args()
@@ -105,18 +106,23 @@ def main():
                                      std=[0.229, 0.224, 0.225])
     
     cudnn.benchmark = True
-
-    # preparing the training laoder
-    train_loader = torch.utils.data.DataLoader(
-        ImagerLoader(opts.img_path,
-            transforms.Compose([
+    transform_list = [
             transforms.Resize(256), # rescale the image keeping the original aspect ratio
             transforms.CenterCrop(256), # we get only the center of that rescaled
             transforms.RandomCrop(224), # random crop within the center crop 
-            transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
-        ]),data_path=opts.data_path,partition='train',sem_reg=opts.semantic_reg),
+        ]
+        
+    if opts.data_aug.lower() == 'new':
+        print("You are going to use the custom data augmentation class")
+        transform_list.insert(0, CustomDataAugmentation())
+
+    
+    # preparing the training laoder
+    train_loader = torch.utils.data.DataLoader(
+        ImagerLoader(opts.img_path,
+            transforms.Compose(transform_list),data_path=opts.data_path,partition='train',sem_reg=opts.semantic_reg),
         batch_size=opts.batch_size, shuffle=True,
         num_workers=opts.workers, pin_memory=True, drop_last=True)
     print('Training loader prepared.')
