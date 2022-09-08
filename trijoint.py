@@ -98,22 +98,28 @@ class im2recipe(nn.Module):
     def __init__(self):
         super(im2recipe, self).__init__()
         if opts.preModel=='resNet50':
-            resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-            modules = list(resnet.children())[:-1]  # we do not use the last fc layer.         
-            self.visionMLP = nn.Sequential(*modules)
-
-            self.visual_embedding = nn.Sequential(
-                nn.Linear(opts.imfeatDim, opts.embDim),
-                nn.Tanh(),
-            )
-            
-            self.recipe_embedding = nn.Sequential(
-                nn.Linear(opts.irnnDim*2 + opts.srnnDim, opts.embDim, opts.embDim),
-                nn.Tanh(),
-            )
-
+            neural_net = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+        elif opts.preModel=='resNeXt50':
+            neural_net = models.resnext50_32x4d(weights=models.ResNeXt50_32X4D_Weights.DEFAULT)
+        elif opts.preModel=='SE_resnet50':
+            neural_net = torch.hub.load(
+                        'moskomule/senet.pytorch',
+                        'se_resnet50',
+                        pretrained=True, trust_repo='check')
         else:
-            raise Exception('Only resNet50 model is implemented.') 
+            raise Exception('Only resNet50, resNeXt50, SE_resnet50 models are implemented.') 
+
+        modules = list(neural_net.children())[:-1]  # we do not use the last fc layer.         
+        self.visionMLP = nn.Sequential(*modules)
+        self.visual_embedding = nn.Sequential(
+            nn.Linear(opts.imfeatDim, opts.embDim),
+            nn.Tanh(),
+        )
+        
+        self.recipe_embedding = nn.Sequential(
+            nn.Linear(opts.irnnDim*2 + opts.srnnDim, opts.embDim, opts.embDim),
+            nn.Tanh(),
+        )
         self.stRNN_     = stRNN()
         self.ingRNN_    = ingRNN()
         self.table      = TableModule()
