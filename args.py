@@ -50,7 +50,7 @@ def get_parser():
     # test
     parser.add_argument('--path_results', default='results/', type=str)
     parser.add_argument('--model_path', default='snapshots/model_e220_v-4.700.pth.tar', type=str)
-    parser.add_argument('--test_image_path', default='chicken.jpg', type=str)    
+    parser.add_argument('--test_image_path', default='cheese_cake.jpg', type=str)    
 
     # MedR / Recall@1 / Recall@5 / Recall@10
     parser.add_argument('--embtype', default='image', type=str) # [image|recipe] query type
