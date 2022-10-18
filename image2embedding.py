@@ -68,12 +68,14 @@ def main():
     im = transform(im)
     im = im.view((1,)+im.shape)
     # get model output
-    output = model.visionMLP(im)
-    output = norm(output)
-    output = output.data.cpu().numpy()
+    visual_emb = model.visionMLP(im)
+    visual_emb = visual_emb.view(visual_emb.size(0), -1)
+    visual_emb = model.visual_embedding(visual_emb)
+    visual_emb = norm(visual_emb)
+    visual_emb = visual_emb.data.cpu().numpy()
     # save output
     with open(im_path.replace(ext,'pkl'), 'wb') as f:
-        pickle.dump(output, f)
+        pickle.dump(visual_emb, f)
 
 if __name__ == '__main__':
     main()

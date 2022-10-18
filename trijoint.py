@@ -106,8 +106,13 @@ class im2recipe(nn.Module):
                         'moskomule/senet.pytorch',
                         'se_resnet50',
                         pretrained=True, trust_repo='check')
+        elif opts.preModel=='efficientnet':
+            neural_net = torch.hub.load(
+                        'pytorch/vision',
+                        'efficientnet_v2_s',
+                        pretrained=True, trust_repo='check')
         else:
-            raise Exception('Only resNet50, resNeXt50, SE_resnet50 models are implemented.') 
+            raise Exception('Only resNet50, resNeXt50, SE_resnet50, efficientnet models are implemented.') 
 
         modules = list(neural_net.children())[:-1]  # we do not use the last fc layer.         
         self.visionMLP = nn.Sequential(*modules)

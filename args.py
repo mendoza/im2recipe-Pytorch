@@ -13,7 +13,7 @@ def get_parser():
     parser.add_argument('--workers', default=12, type=int)
 
     # model
-    parser.add_argument('--batch_size', default=32, type=int)
+    parser.add_argument('--batch_size', default=26, type=int)
     parser.add_argument('--snapshots', default='snapshots/',type=str)
 
     # im2recipe model
